@@ -14,6 +14,11 @@ typedef struct c8 {
 	uint8_t  sp;					// 8-bit stack pointer
 
 	uint8_t  display[0x40][0x20];	// 64x32 monochromatic display
+	char     keypad[0x10];			// 16-key hexadecimal keypad
+
+	uint8_t  dt;					// delay timer register
+	uint8_t  st;					// sound timer register
+	uint8_t  rate;					// Hz which decrement both timers
 
 } Chip8;
 
@@ -35,14 +40,18 @@ void chip8_init(Chip8 *c8) {
 
 
 	// initialize values and set memory
-	c8->pc	= 0x200;
-	c8->sp	= 0;
-	c8->I	= 0;
+	c8->pc	 = 0x200;
+	c8->sp	 = 0;
+	c8->I	 = 0;
+	c8->dt   = 0;
+	c8->st   = 0;
+	c8->rate = 60;
 
 	memset(c8->mem, 0, sizeof(c8->mem));
 	memset(c8->v, 0, sizeof(c8->v));
 	memset(c8->stack, 0, sizeof(c8->stack));
 	memset(c8->display, 0, sizeof(c8->display));
+	memset(c8->keypad, 0, sizeof(c8->keypad));
 
 	// load in font data
 	unsigned char font_data[80] = {
@@ -234,21 +243,21 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 
 					break;
 				case 0x0006:
-					printf("8xy6 - SHR Vx {, Vy}");
+					printf("8xy6 - SHR Vx {, Vy}\n");
 
 					c8->v[0xF] = (c8->v[x] & 0x000F) == 1 ? 1: 0;
 					c8->v[x] >>= 1; // divide by two
 
 					break;
 				case 0x0007:
-					printf("8xy7 - SUBN Vx, Vy");
+					printf("8xy7 - SUBN Vx, Vy\n");
 
 					c8->v[0xF] = c8->v[y] > c8->v[x] ? 1: 0;
 					c8->v[x] = c8->v[y] - c8->v[x];
 
 					break;
 				case 0x000E:
-					printf("8xyE - SHL Vx, {, Vy}");
+					printf("8xyE - SHL Vx, {, Vy}\n");
 
 					c8->v[0xF] = (c8->v[x] & 0xF000) >> 12 == 1 ? 0: 1;
 					c8->v[x] <<= 1; // multiple by two
@@ -260,7 +269,7 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			}
 		}
 		case 0x9000: {
-			printf("9xy0 - SNE vx, Vy");
+			printf("9xy0 - SNE vx, Vy\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t y = (opcode & 0x00F0) >> 4;
@@ -268,6 +277,136 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 				c8->pc += 2;
 
 			break;
+		}
+		case 0xA000:
+			printf("Annn - LD I, addr\n");
+
+			c8->I = opcode & 0x0FFF;
+
+			break;
+		case 0xB000:
+			printf("Bnnn - JP V0, addr\n");
+
+			c8->pc = (opcode & 0x0FFF) + c8->v[0x0];
+
+			break;
+		case 0xC000: {
+			printf("Cxkk - RND Vc, byte\n");
+
+			uint8_t x = (opcode & 0x0F00) >> 8;
+			uint8_t kk = opcode & 0x00FF;
+			c8->v[x] = (rand() % 256) & kk;
+
+			break;
+		}
+		case 0xD000: {
+			printf("Dxyn - DRW Vx, Vy, nibble\n");
+
+			uint8_t x0 = c8->v[(opcode & 0x0F00) >> 8] % 0x40;
+			uint8_t y0 = c8->v[(opcode & 0x00F0) >> 4] % 0x20;
+			uint8_t n = opcode & 0x000F; // height of sprite
+
+			// todo - implment a redraw screen flag 
+			c8->v[0xF] = 0; // unset collision bit
+
+			for (uint8_t i=y0; i < y0+n && i < 0x20; i++) {
+				uint8_t byte = c8->mem[c8->I + i];
+
+				for (uint8_t k=0; k < 8; k++) {
+					if (((byte >> k) & 0x1) == 1) {
+						if (c8->display[x0 + k][y0 + i] == 1)
+							c8->v[0xF] = 1;
+
+						c8->display[x0 + k][y0 + i] ^= 1;
+					}
+				}
+			}
+
+			break;
+		}
+		case 0xE000: {
+			uint8_t x = (opcode & 0x0F00) >> 8;
+
+			switch (opcode & 0x00FF) {
+				case 0x009E:
+					printf("Ex9E - SKP Vx\n");
+
+					if (c8->keypad[x] == 1)
+						c8->pc += 2;
+
+					break;
+				case 0x00A1:
+					printf("ExA1 - SKNP Vx\n");
+
+					if (c8->keypad[x] == 0)
+						c8->pc += 2;
+
+					break;
+				default:
+					printf("ERROR: Could not execute opcode: %04x\n", opcode);
+					exit(1);
+			}
+		}
+		case 0xF000: {
+			uint8_t x = (opcode & 0x0F000) >> 8;
+
+			switch (opcode & 0x00FF) {
+				case 0x0007:
+					printf("Fx07 - LD Vx, DT\n");
+
+					c8->v[x] = c8->dt;
+
+					break;
+				case 0x000A:
+					printf("Fx0A - LD Vx, K\n");
+
+					for (uint8_t k=0x0; k<=0x10; k++) {
+						if (c8->keypad[k] == 1) {
+							c8->v[x] = k;
+							break;
+						}
+					}
+
+					c8->pc -= 2; // decrement PC by two bytes to create a spin lock
+
+					break;
+				case 0x0015:
+					printf("Fx15 - LD DT, Vx\n");
+
+					c8->dt = c8->v[x];
+
+					break;
+				case 0x0018:
+					printf("Fx18 - LD ST, Vx\n");
+
+					c8->st = c8->v[x];
+
+					break;
+				case 0x001E:
+					printf("Fx1E - ADD I, Vx\n");
+
+					c8->I += c8->v[x];
+
+					break;
+				case 0x0029:
+					printf("0xFx29 - LD F, Vx\n");
+
+					c8->I = c8->v[x] * 5;
+
+					break;
+				case 0x0033:
+					printf("0xFx33 - LD B, Vx\n");
+					break;
+				case 0x0055:
+					printf("Fx55 - LD [I], Vx\n");
+					break;
+				case 0x0065:
+					printf("Fx65 - LD Vx, [I]\n");
+					break;
+				default:
+					printf("ERROR: Could not execute opcode: %04x\n", opcode);
+					exit(1);
+			}
 		}
 		default:
 			printf("ERROR: Could not execute opcode: %04x\n", opcode);
