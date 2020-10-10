@@ -77,13 +77,13 @@ void chip8_init(Chip8 *c8) {
 		c8->mem[i] = font_data[i];
 
 		// display font char
-		/*
+		
 		for (int j=0; j<4; j++)
 			printf("%c", (c8->mem[i] & (0x80) >> j) ? '*':' ');
 		printf("\n");
 		if ((i+1)%5 == 0)
 			printf("\n");
-		*/
+		
 	}
 
 	return;
@@ -399,9 +399,23 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 					break;
 				case 0x0055:
 					printf("Fx55 - LD [I], Vx\n");
+
+					for (uint8_t i=0x0; i<=0x10; i++)
+						c8->mem[c8->I + i] = c8->v[i];
+					/*
+						c8->I does not get incremented for support of modern ROMs.
+						Older (70s-80s) might depend on it being set after each
+						register is stored into memory. This also goes for Fx65.
+					*/				
+
 					break;
 				case 0x0065:
 					printf("Fx65 - LD Vx, [I]\n");
+
+					for (uint8_t i=0x0; i<=0x10; i++)
+						c8->v[i] = c8->mem[c8->I + i];
+					// See comment in Fx55
+
 					break;
 				default:
 					printf("ERROR: Could not execute opcode: %04x\n", opcode);
