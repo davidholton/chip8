@@ -20,23 +20,25 @@ typedef struct c8 {
 	uint8_t  st;					// sound timer register
 	uint8_t  rate;					// Hz which decrement both timers
 
+	uint8_t  screen_draw;
+
 } Chip8;
 
 void chip8_init(Chip8 *c8) {
 
-	printf("/*----------initializing chip8----------*\\\n");
+	// printf("/*----------initializing chip8----------*\\\n");
 
-	printf("\tmem[0x1000]\t%ld bytes\n", sizeof(c8->mem));
-	printf("\tv[0x10]\t\t%ld bytes\n", sizeof(c8->v));
-	printf("\tstack[0x10]\t%ld bytes\n\n", sizeof(c8->stack));
+	// printf("\tmem[0x1000]\t%ld bytes\n", sizeof(c8->mem));
+	// printf("\tv[0x10]\t\t%ld bytes\n", sizeof(c8->v));
+	// printf("\tstack[0x10]\t%ld bytes\n\n", sizeof(c8->stack));
 
-	printf("\tpc\t\t%ld bytes\n", sizeof(c8->pc));
-	printf("\tsp\t\t%ld byte\n\n", sizeof(c8->sp));
-	printf("\tI\t\t%ld bytes\n", sizeof(c8->I));
+	// printf("\tpc\t\t%ld bytes\n", sizeof(c8->pc));
+	// printf("\tsp\t\t%ld byte\n\n", sizeof(c8->sp));
+	// printf("\tI\t\t%ld bytes\n", sizeof(c8->I));
 
 	// Should be 2048 bits not bytes?
-	printf("\tdisplay[0x800]\t%ld bytes\n", sizeof(c8->display));
-	printf("/*--------------------------------------*\\\n\n");
+	// printf("\tdisplay[0x800]\t%ld bytes\n", sizeof(c8->display));
+	// printf("/*--------------------------------------*\\\n\n");
 
 
 	// initialize values and set memory
@@ -46,6 +48,7 @@ void chip8_init(Chip8 *c8) {
 	c8->dt   = 0;
 	c8->st   = 0;
 	c8->rate = 60;
+	c8->screen_draw = 0;
 
 	memset(c8->mem, 0, sizeof(c8->mem));
 	memset(c8->v, 0, sizeof(c8->v));
@@ -78,11 +81,11 @@ void chip8_init(Chip8 *c8) {
 
 		// display font char
 		
-		for (int j=0; j<4; j++)
-			printf("%c", (c8->mem[i] & (0x80) >> j) ? '*':' ');
-		printf("\n");
-		if ((i+1)%5 == 0)
-			printf("\n");
+		// for (int j=0; j<4; j++)
+		// 	// printf("%c", (c8->mem[i] & (0x80) >> j) ? '*':' ');
+		// printf("\n");
+		// if ((i+1)%5 == 0)
+		// 	// printf("\n");
 		
 	}
 
@@ -96,6 +99,15 @@ void chip8_debug(Chip8 *c8) {
 	printf("\tI:\t%d\n", c8->I);
 
 	return;
+}
+
+void chip8_console_draw(Chip8 *c8) {
+	for (unsigned y = 0; y < 32; y++) {
+		for (unsigned x = 0; x < 64; x++)
+			printf("%s", c8->display[x][y] == 1 ? "\u2593": "\u2591");
+
+		printf("\n");
+	}
 }
 
 uint16_t fetch_opcode(Chip8 *c8) {
@@ -115,18 +127,55 @@ uint16_t fetch_opcode(Chip8 *c8) {
 }
 
 
+void chip8_load_rom(Chip8 *c8, const char *filename) {
+	// load into 0x200
+	FILE *fp = fopen(filename, "r");
+	if (fp == NULL) {
+		printf("ERROR: could not open rom file \"%s\"\n", filename);
+		exit(1);
+	}
+
+	fseek(fp, 0L, SEEK_END);
+	long int rom_size = ftell(fp);
+	// printf("%ld, %d\n", rom_size, 0x1000);
+	if (rom_size > 0x1000) {
+		printf("ERROR: rom size is too large to load\n");
+		exit(1);
+	}
+
+	fseek(fp, 0L, SEEK_SET);
+
+	uint8_t *buffer = (uint8_t *) malloc(rom_size * sizeof(uint8_t));
+	if (buffer == NULL) {
+		printf("ERROR: could not create rom buffer\n");
+		fclose(fp);
+		exit(1);
+	}
+
+	fread(buffer, sizeof(uint8_t), rom_size, fp);
+
+	for (unsigned i = 0; i < rom_size; i++)
+		c8->mem[0x200 + i] = buffer[i];
+
+	fclose(fp);
+	free(buffer);
+}
+
 void chip8_exec(Chip8 *c8, uint16_t opcode) {
-	printf("opcode:\t%04x\n", opcode);
+	// printf("opcode:\t%04x\n", opcode);
 
 	switch(opcode & 0xF000) {
 		case 0x0000:
 			switch(opcode & 0x00FF) {
 				case 0x00E0: // CLS
 					// todo
-					printf("0x00E0 - CLS\n");
+					// printf("0x00E0 - CLS\n");
+
+					memset(c8->display, 0, sizeof(c8->display));
+
 					break;
 				case 0x00EE: // RET
-					printf("0x00EE - RET\n");
+					// printf("0x00EE - RET\n");
 
 					c8->pc=c8->stack[c8->sp];
 					c8->sp--;
@@ -136,21 +185,22 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 					printf("ERROR: Could not execute opcode: %04x\n", opcode);
 					exit(1);
 			}
+			break;
 		case 0x1000:
-			printf("0x1nnn - JP addr\n");
+			// printf("0x1nnn - JP addr\n");
 
 			c8->pc = opcode & 0x0FFF;
 
 			break;
 		case 0x2000:
-			printf("0x2nnn - CALL addr\n");
+			// printf("0x2nnn - CALL addr\n");
 
 			c8->stack[++c8->sp] = c8->pc;
 			c8->pc = opcode & 0x0FFF;
 
 			break;
 		case 0x3000: {
-			printf("0x3xkk - SE Vx, byte\n");
+			// printf("0x3xkk - SE Vx, byte\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t kk = opcode & 0x00FF;
@@ -160,7 +210,7 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			break;
 		}
 		case 0x4000: {
-			printf("0x4xkk - SNE Vx, byte\n");
+			// printf("0x4xkk - SNE Vx, byte\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t kk = opcode & 0x00FF;
@@ -170,7 +220,7 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			break;
 		}
 		case 0x5000: {
-			printf("0x5xy0 - SE Vx, Vy\n");
+			// printf("0x5xy0 - SE Vx, Vy\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t y = (opcode & 0x00F0) >> 4;
@@ -180,7 +230,7 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			break;
 		}
 		case 0x6000: {
-			printf("6xkk - LD Vx, byte\n");
+			// printf("6xkk - LD Vx, byte\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t kk = opcode & 0x00FF;
@@ -189,7 +239,7 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			break;
 		}
 		case 0x7000: {
-			printf("7xkk - ADD Vx, byte\n");
+			// printf("7xkk - ADD Vx, byte\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t kk = opcode & 0x00FF;
@@ -203,31 +253,31 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 
 			switch (opcode & 0x000F) {
 				case 0x0000:
-					printf("8xy0 - LD Vx, Vy\n");
+					// printf("8xy0 - LD Vx, Vy\n");
 
 					c8->v[x] = c8->v[y];
 
 					break;
 				case 0x0001:
-					printf("8xy1 - OR Vx, Vy\n");
+					// printf("8xy1 - OR Vx, Vy\n");
 
 					c8->v[x] |= c8->v[y];
 
 					break;
 				case 0x0002:
-					printf("8xy2 - AND Vx, Vy\n");
+					// printf("8xy2 - AND Vx, Vy\n");
 
 					c8->v[x] &= c8->v[y];
 
 					break;
 				case 0x0003:
-					printf("8xy3 - XOR Vx, Vy\n");
+					// printf("8xy3 - XOR Vx, Vy\n");
 
 					c8->v[x] ^= c8->v[y];
 
 					break;
 				case 0x0004: {
-					printf("8xy4 - ADD Vx, Vy\n");
+					// printf("8xy4 - ADD Vx, Vy\n");
 
 					uint8_t result = c8->v[x] + c8->v[y];
 					c8->v[0xF] = result > 255 ? 0: 1;
@@ -236,28 +286,28 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 					break;
 				}
 				case 0x0005:
-					printf("8xy5 - SUB Vx, Vy\n");
+					// printf("8xy5 - SUB Vx, Vy\n");
 
 					c8->v[0xF] = c8->v[x] > c8->v[y] ? 1: 0;
 					c8->v[x] -= c8->v[y];
 
 					break;
 				case 0x0006:
-					printf("8xy6 - SHR Vx {, Vy}\n");
+					// printf("8xy6 - SHR Vx {, Vy}\n");
 
 					c8->v[0xF] = (c8->v[x] & 0x000F) == 1 ? 1: 0;
 					c8->v[x] >>= 1; // divide by two
 
 					break;
 				case 0x0007:
-					printf("8xy7 - SUBN Vx, Vy\n");
+					// printf("8xy7 - SUBN Vx, Vy\n");
 
 					c8->v[0xF] = c8->v[y] > c8->v[x] ? 1: 0;
 					c8->v[x] = c8->v[y] - c8->v[x];
 
 					break;
 				case 0x000E:
-					printf("8xyE - SHL Vx, {, Vy}\n");
+					// printf("8xyE - SHL Vx, {, Vy}\n");
 
 					c8->v[0xF] = (c8->v[x] & 0xF000) >> 12 == 1 ? 0: 1;
 					c8->v[x] <<= 1; // multiple by two
@@ -269,7 +319,7 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			}
 		}
 		case 0x9000: {
-			printf("9xy0 - SNE vx, Vy\n");
+			// printf("9xy0 - SNE vx, Vy\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t y = (opcode & 0x00F0) >> 4;
@@ -279,19 +329,19 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			break;
 		}
 		case 0xA000:
-			printf("Annn - LD I, addr\n");
+			// printf("Annn - LD I, addr\n");
 
 			c8->I = opcode & 0x0FFF;
 
 			break;
 		case 0xB000:
-			printf("Bnnn - JP V0, addr\n");
+			// printf("Bnnn - JP V0, addr\n");
 
 			c8->pc = (opcode & 0x0FFF) + c8->v[0x0];
 
 			break;
 		case 0xC000: {
-			printf("Cxkk - RND Vc, byte\n");
+			// printf("Cxkk - RND Vc, byte\n");
 
 			uint8_t x = (opcode & 0x0F00) >> 8;
 			uint8_t kk = opcode & 0x00FF;
@@ -300,24 +350,26 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 			break;
 		}
 		case 0xD000: {
-			printf("Dxyn - DRW Vx, Vy, nibble\n");
+			// printf("Dxyn - DRW Vx, Vy, nibble\n");
 
 			uint8_t x0 = c8->v[(opcode & 0x0F00) >> 8] % 0x40;
 			uint8_t y0 = c8->v[(opcode & 0x00F0) >> 4] % 0x20;
-			uint8_t n = opcode & 0x000F; // height of sprite
+			uint8_t n = opcode & 0x000F;
 
-			// todo - implment a redraw screen flag 
-			c8->v[0xF] = 0; // unset collision bit
+			c8->v[0xF] = 0;
+			c8->screen_draw = 1;
 
-			for (uint8_t i=y0; i < y0+n && i < 0x20; i++) {
-				uint8_t byte = c8->mem[c8->I + i];
+			for (unsigned i = 0; i < n; i++) {
+				uint8_t line_byte = c8->mem[c8->I + i];
 
-				for (uint8_t k=0; k < 8; k++) {
-					if (((byte >> k) & 0x1) == 1) {
+				for (int k = 7; k >= 0; --k) {
+					uint8_t bit = (line_byte >> k) & 1;
+
+					if (((line_byte >> k) & 1) == 1) {
 						if (c8->display[x0 + k][y0 + i] == 1)
 							c8->v[0xF] = 1;
 
-						c8->display[x0 + k][y0 + i] ^= 1;
+						c8->display[x0 + (7 - k)][y0 + i] ^= bit;
 					}
 				}
 			}
@@ -329,14 +381,14 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 
 			switch (opcode & 0x00FF) {
 				case 0x009E:
-					printf("Ex9E - SKP Vx\n");
+					// printf("Ex9E - SKP Vx\n");
 
 					if (c8->keypad[x] == 1)
 						c8->pc += 2;
 
 					break;
 				case 0x00A1:
-					printf("ExA1 - SKNP Vx\n");
+					// printf("ExA1 - SKNP Vx\n");
 
 					if (c8->keypad[x] == 0)
 						c8->pc += 2;
@@ -352,13 +404,13 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 
 			switch (opcode & 0x00FF) {
 				case 0x0007:
-					printf("Fx07 - LD Vx, DT\n");
+					// printf("Fx07 - LD Vx, DT\n");
 
 					c8->v[x] = c8->dt;
 
 					break;
 				case 0x000A:
-					printf("Fx0A - LD Vx, K\n");
+					// printf("Fx0A - LD Vx, K\n");
 
 					for (uint8_t k=0x0; k<=0x10; k++) {
 						if (c8->keypad[k] == 1) {
@@ -371,34 +423,34 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 
 					break;
 				case 0x0015:
-					printf("Fx15 - LD DT, Vx\n");
+					// printf("Fx15 - LD DT, Vx\n");
 
 					c8->dt = c8->v[x];
 
 					break;
 				case 0x0018:
-					printf("Fx18 - LD ST, Vx\n");
+					// printf("Fx18 - LD ST, Vx\n");
 
 					c8->st = c8->v[x];
 
 					break;
 				case 0x001E:
-					printf("Fx1E - ADD I, Vx\n");
+					// printf("Fx1E - ADD I, Vx\n");
 
 					c8->I += c8->v[x];
 
 					break;
 				case 0x0029:
-					printf("0xFx29 - LD F, Vx\n");
+					// printf("0xFx29 - LD F, Vx\n");
 
 					c8->I = c8->v[x] * 5;
 
 					break;
 				case 0x0033:
-					printf("0xFx33 - LD B, Vx\n");
+					// printf("0xFx33 - LD B, Vx\n");
 					break;
 				case 0x0055:
-					printf("Fx55 - LD [I], Vx\n");
+					// printf("Fx55 - LD [I], Vx\n");
 
 					for (uint8_t i=0x0; i<=0x10; i++)
 						c8->mem[c8->I + i] = c8->v[i];
@@ -410,7 +462,7 @@ void chip8_exec(Chip8 *c8, uint16_t opcode) {
 
 					break;
 				case 0x0065:
-					printf("Fx65 - LD Vx, [I]\n");
+					// printf("Fx65 - LD Vx, [I]\n");
 
 					for (uint8_t i=0x0; i<=0x10; i++)
 						c8->v[i] = c8->mem[c8->I + i];
@@ -436,14 +488,18 @@ int main(int argc, char* argv[]) {
 	Chip8 c8;
 
 	chip8_init(&c8);
+	chip8_load_rom(&c8, "ibm_logo.ch8");
 
-	//for (;;) {
+	for (;;) {
+		uint16_t opcode = fetch_opcode(&c8);
+		chip8_exec(&c8, opcode);
+		//chip8_debug(&c8);
 
-	c8.mem[0x200] = 0x00;
-	c8.mem[0x201] = 0xE0;
-	uint16_t opcode = fetch_opcode(&c8);
-	chip8_exec(&c8, opcode);
-	//}
+		if (c8.screen_draw == 1) {
+			c8.screen_draw = 0;
+			chip8_console_draw(&c8);
+		}
+	}
 
 	return 0;
 }
