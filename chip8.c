@@ -23,7 +23,8 @@ void chip8_initialize(Chip8* c8) {
 	memset(c8->v,      0, sizeof(c8->v));
 	memset(c8->stack,  0, sizeof(c8->stack));
 	memset(c8->screen, 0, sizeof(c8->screen));
-	memset(c8->keypad, 0, sizeof(c8->keypad));
+	for (int i = 0; i < 16; i++)
+		c8->keypad[i] = false;
 
 	// Fonts are 4-bits x 5-bits
 	unsigned char font_data[80] = {
@@ -291,32 +292,43 @@ void chip8_execute(Chip8* c8) {
 			for (unsigned i = 0; i < n; i++) {
 				uint8_t line_byte = c8->mem[c8->I + i];
 
-				for (int k = 7; k >= 0; --k) {
-					uint8_t bit = (line_byte >> k) & 1;
+				for (int k = 0; k < 8; k++) {
+					uint8_t bit = (line_byte >> (7 - k)) & 1;
 
-					if (((line_byte >> k) & 1) == 1) {
+					if (((line_byte >> (7 - k)) & 1) == 1) {
 						if (c8->screen[x0 + k][y0 + i] == 1)
 							c8->v[0xF] = 1;
 
-						c8->screen[x0 + (7 - k)][y0 + i] ^= bit;
+						c8->screen[x0 + k][y0 + i] ^= bit;
 					}
 				}
 			}
 			
+			// for (int line = 0; y < n; y++) {
+			// 	uint8_t pixel = c8->v[c8->I + line];
+			// 	for (uint8_t xline = 0; xline < 8; xline++) {
+			// 		if ((pixel & (0x80>>xline)) != 0) {
+			// 			if (c8->screen[x0 + xline][y0+line] == 1)
+			// 				c8->v[0xF] = 1;
+			// 			 c8->screen[x0 + xline][y0+line]  ^= 1;
+			// 		}
+			// 	}
+			// }
+
 			break;
 		}
 		case 0xE: {
 			switch (kk) {
 				case 0x9E: {
 					if (c8->logging) printf("Ex9E - SKP Vx\n");
-					if (c8->keypad[x] == 1)
+					if (c8->keypad[x] == true)
 						c8->pc += 2;
 
 					break;
 				}
 				case 0xA1: {
 					if (c8->logging) printf("ExA1 - SKNP Vx\n");
-					if (c8->keypad[x] == 0)
+					if (c8->keypad[x] == false)
 						c8->pc += 2;
 
 					break;
@@ -339,7 +351,7 @@ void chip8_execute(Chip8* c8) {
 				case 0x0A: {
 					if (c8->logging) printf("Fx0A - LD Vx, K\n");
 					for (unsigned k = 0; k < 16; k++) {
-						if (c8->keypad[k] == 1) {
+						if (c8->keypad[k] == true) {
 							c8->v[x] = k;
 							if (c8->logging) printf("break; todo\n");
 						}

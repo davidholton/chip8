@@ -1,26 +1,36 @@
-#include "chip8.h"
+// #include "chip8.h"
+#include "display.h"
 
-#include <SDL.h>
 #include <stdio.h>
 
-const int SCREEN_WIDTH = 64;
-const int SCREEN_HEIGHT = 32;
+const uint8_t KEYMAP[16] = {
+	SDLK_x, // 0
+	SDLK_1, // 1
+	SDLK_2, // 2
+	SDLK_3, // 3
+	SDLK_q, // 4
+	SDLK_w, // 5
+	SDLK_e, // 6
+	SDLK_a, // 7
+	SDLK_s, // 8
+	SDLK_d, // 9
+	SDLK_z, // A
+	SDLK_c, // B
+	SDLK_4, // C
+	SDLK_r, // D
+	SDLK_f, // E
+	SDLK_v  // F
+};
 
-int display_init(void);
-void display_close(void);
-
-SDL_Window *window = NULL;
-SDL_Renderer *renderer = NULL;
-SDL_Texture *texture = NULL;
 
 int main(int argc, char* argv[]) {
 
 	Chip8 c8;
 
 	chip8_initialize(&c8);
-	chip8_load_rom(&c8, "roms/test_opcode.ch8");
+	chip8_load_rom(&c8, "roms/BRIX.ch8");
 
-	c8.logging = true;
+	//c8.logging = true;
 
 	// for (;;) {
 	// 	chip8_tick(&c8);
@@ -36,7 +46,9 @@ int main(int argc, char* argv[]) {
 	// 	}
 	// }
 
-	if (!display_init()) {
+	Display d;
+
+	if (!display_init(&d, 64, 32)) {
 		printf("Display could not initialize! SDL_Error: %s\n", SDL_GetError());
 		exit(1);
 	}
@@ -44,84 +56,42 @@ int main(int argc, char* argv[]) {
 	int quit = 0;
 	SDL_Event e;
 
-	uint32_t *pixels = malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
+	
+	//uint32_t *pixel_buffer = malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
 
 	while (!quit) {
 		while (SDL_PollEvent(&e) !=0 ) {
 			if (e.type == SDL_QUIT) {
 				quit = 1;
 			}
+			if (e.type == SDL_KEYDOWN) {
+				for (int i = 0; i < 16; i++) {
+					if (e.key.keysym.sym == KEYMAP[i]) {
+						printf("KEYMAP[%d]\n", KEYMAP[i]);
+						c8.keypad[i] = true;
+					}
+				}
+			}
+			if (e.type == SDL_KEYUP) {
+				for (int i = 0; i < 16; i++) {
+					if (e.key.keysym.sym == KEYMAP[i]) {
+						c8.keypad[i] = false;
+					}
+				} 
+			}
 		}
 
 		chip8_tick(&c8);
 
-		if (c8.screen_update) {
-			c8.screen_update = false;
-			
-			for (int x = 0; x < SCREEN_WIDTH; x++) {
-				for (int y = 0; y < SCREEN_HEIGHT; y++) {
-					pixels[y * SCREEN_WIDTH + x] = (0xFFFFFF00 * c8.screen[x][y]) | 0xFF;
-				}
-			}
-		}
+		display_draw(&d, &c8);
 
-		SDL_UpdateTexture(texture, NULL, pixels, SCREEN_WIDTH * sizeof(uint32_t));
-
-		SDL_RenderClear(renderer);
-		SDL_RenderCopy(renderer, texture, NULL, NULL);
-		SDL_RenderPresent(renderer);
+		SDL_Delay(3);
 	}
-
-	
-	
 
 	// SDL_Delay(2000);
 
 	// stop SDL
-	display_close();
+	display_close(&d);
 
 	return 0;
-}
-
-int display_init(void) {
-	int success = 1;
-
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		success = 0;
-	} else {
-		window = SDL_CreateWindow("CHIP-8", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-		if (window == NULL) {
-			success = 0;
-		} else {
-			renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-			if (renderer == NULL) {
-				success = 0;
-			} else {
-				texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, SCREEN_WIDTH, SCREEN_HEIGHT);
-				if (texture == NULL) {
-					success = 0;
-				} else {
-					SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
-					SDL_RenderClear(renderer);
-					SDL_RenderPresent(renderer);
-				}
-			}
-		}
-	}
-
-	return success;
-}
-
-void display_close(void) {
-
-	SDL_DestroyWindow(window);
-	window = NULL;
-
-	SDL_DestroyRenderer(renderer);
-	renderer = NULL;
-
-	SDL_DestroyTexture(texture);
-	texture = NULL;
-
-	SDL_Quit();
 }

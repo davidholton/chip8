@@ -15,7 +15,7 @@ typedef struct c8 {
 	uint16_t pc;					// 16-bit program counter
 	uint16_t I;						// 16-bit memory address register
 
-	bool     screen[0x40][0x20];	// 64x32 monochromatic display
+	uint8_t  screen[0x40][0x20];	// 64x32 monochromatic display
 	bool     screen_update;			// screen update flag
 
 	bool     keypad[0x10];			// 16-key hexadecimal keypad
