@@ -6,6 +6,8 @@
 #include <SDL.h>
 #include <stdbool.h>
 
+const uint8_t KEYMAP[16];
+
 typedef struct display {
 
 	unsigned int width;

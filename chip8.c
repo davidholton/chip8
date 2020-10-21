@@ -23,7 +23,7 @@ void chip8_initialize(Chip8* c8) {
 	memset(c8->v,      0, sizeof(c8->v));
 	memset(c8->stack,  0, sizeof(c8->stack));
 	memset(c8->screen, 0, sizeof(c8->screen));
-	for (int i = 0; i < 16; i++)
+	for (int i = 0; i < 0x10; i++)
 		c8->keypad[i] = false;
 
 	// Fonts are 4-bits x 5-bits
@@ -321,14 +321,14 @@ void chip8_execute(Chip8* c8) {
 			switch (kk) {
 				case 0x9E: {
 					if (c8->logging) printf("Ex9E - SKP Vx\n");
-					if (c8->keypad[x] == true)
+					if (c8->keypad[c8->v[x]] == 1)
 						c8->pc += 2;
 
 					break;
 				}
 				case 0xA1: {
 					if (c8->logging) printf("ExA1 - SKNP Vx\n");
-					if (c8->keypad[x] == false)
+					if (c8->keypad[c8->v[x]] == 0)
 						c8->pc += 2;
 
 					break;
@@ -351,7 +351,7 @@ void chip8_execute(Chip8* c8) {
 				case 0x0A: {
 					if (c8->logging) printf("Fx0A - LD Vx, K\n");
 					for (unsigned k = 0; k < 16; k++) {
-						if (c8->keypad[k] == true) {
+						if (c8->keypad[k] == 1) {
 							c8->v[x] = k;
 							if (c8->logging) printf("break; todo\n");
 						}
